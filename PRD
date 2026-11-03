@@ -1,0 +1,279 @@
+# PRODUCT REQUIREMENTS DOCUMENT (PRD)
+## Website Jurnal dan Publikasi Artikel Ilmiah
+
+### 1. Informasi Proyek
+
+- **Nama Proyek:** Website Jurnal Ilmiah
+- **Jenis Aplikasi:** Website Publikasi Artikel Ilmiah
+- **Platform:** Web Application
+- **Framework:** Laravel 10
+- **Database:** MySQL
+- **Frontend:** HTML, CSS, Bootstrap 5, JavaScript
+- **Bahasa:** Bahasa Indonesia
+- **Target Pengguna:** Mahasiswa, peneliti, dosen, dan pembaca umum.
+
+### 2. Latar Belakang
+
+Website jurnal ilmiah merupakan platform yang digunakan untuk menyimpan, mengelola, dan mempublikasikan artikel ilmiah secara digital. Website ini dirancang untuk memudahkan pembaca dalam menemukan dan membaca artikel penelitian tanpa harus mencari dokumen secara manual.
+
+Sistem dikembangkan dengan konsep sederhana, memiliki tampilan yang responsif, serta menyediakan fitur pengelolaan artikel yang dapat dilakukan oleh administrator.
+
+Website ini juga dapat digunakan sebagai media publikasi hasil penelitian mahasiswa, khususnya artikel mengenai teknologi informasi, keamanan sistem, dan etika profesi.
+
+### 3. Tujuan Website
+
+1. Menyediakan tempat publikasi artikel ilmiah secara online.
+2. Memudahkan pembaca mencari dan membaca artikel.
+3. Menyediakan fitur unduh artikel dalam format PDF.
+4. Memudahkan administrator mengelola artikel.
+5. Menampilkan informasi penulis dan identitas publikasi.
+
+### 4. Hak Akses Pengguna (User Roles)
+
+Website memiliki dua jenis pengguna.
+
+**A. Administrator**
+
+Administrator memiliki kewenangan untuk:
+- Login ke halaman administrator.
+- Menambahkan artikel baru.
+- Mengubah informasi artikel.
+- Menghapus artikel.
+- Mengunggah dokumen PDF.
+- Mengelola kategori artikel.
+- Mengelola informasi penulis.
+- Melihat daftar seluruh artikel yang tersimpan.
+
+**B. Pengunjung (Guest)**
+
+Pengunjung tidak perlu melakukan login dan dapat:
+- Melihat halaman utama.
+- Melihat daftar artikel.
+- Mencari artikel berdasarkan judul.
+- Membaca detail artikel.
+- Melihat informasi penulis.
+- Mengunduh artikel dalam format PDF.
+
+### 5. Fitur Utama Website
+
+#### 5.1 Halaman Beranda
+Menampilkan:
+- Logo dan nama jurnal.
+- Navigasi website.
+- Deskripsi singkat jurnal.
+- Artikel terbaru.
+- Artikel pilihan.
+- Informasi singkat mengenai website.
+
+#### 5.2 Halaman Daftar Artikel
+Menampilkan seluruh artikel yang telah dipublikasikan.
+
+Informasi yang ditampilkan:
+- Judul artikel.
+- Nama penulis.
+- Tahun publikasi.
+- Kategori artikel.
+- Ringkasan artikel.
+- Tombol baca selengkapnya.
+
+Dilengkapi fitur pencarian berdasarkan judul artikel.
+
+#### 5.3 Halaman Detail Artikel
+Menampilkan informasi artikel secara lengkap, meliputi:
+- Judul artikel.
+- Nama seluruh penulis.
+- Institusi penulis.
+- Abstrak.
+- Kata kunci.
+- Pendahuluan.
+- Metodologi penelitian.
+- Kajian literatur.
+- Hasil dan pembahasan.
+- Kesimpulan.
+- Referensi.
+- Tombol unduh PDF.
+
+#### 5.4 Halaman Tentang
+Menampilkan:
+- Informasi mengenai website jurnal.
+- Tujuan publikasi.
+- Informasi institusi.
+- Informasi kontak pengelola.
+
+#### 5.5 Halaman Login Administrator
+Menyediakan autentikasi administrator menggunakan:
+- Email atau username.
+- Password.
+- Tombol login.
+- Validasi login.
+
+#### 5.6 Dashboard Administrator
+Menampilkan ringkasan:
+- Total artikel.
+- Total kategori.
+- Total penulis.
+- Artikel terbaru.
+
+#### 5.7 Manajemen Artikel (CRUD)
+Administrator dapat melakukan:
+- Create: Menambahkan artikel.
+- Read: Melihat daftar artikel.
+- Update: Mengubah artikel.
+- Delete: Menghapus artikel.
+
+Data artikel meliputi:
+- Judul artikel.
+- Slug artikel.
+- Nama penulis.
+- Kategori.
+- Abstrak.
+- Kata kunci.
+- Isi artikel.
+- File PDF.
+- Tanggal publikasi.
+- Status publikasi (Draft / Published).
+
+### 6. Struktur Halaman Website
+
+1. Beranda
+2. Daftar Artikel
+3. Detail Artikel
+4. Tentang
+5. Login Administrator
+6. Dashboard Administrator
+7. Manajemen Artikel
+8. Tambah Artikel
+9. Edit Artikel
+10. Manajemen Kategori
+
+### 7. Desain UI/UX
+
+Konsep desain yang digunakan adalah minimalis, modern, dan profesional.
+
+**Ketentuan desain:**
+- Warna utama putih dan biru tua.
+- Tampilan bersih dan tidak terlalu banyak elemen.
+- Tipografi mudah dibaca.
+- Navigasi sederhana.
+- Layout artikel menyerupai website jurnal akademik.
+- Responsif untuk desktop, tablet, dan smartphone.
+- Dashboard administrator menggunakan desain sederhana.
+
+### 8. Kebutuhan Teknis
+
+**Backend:**
+- Laravel 11.
+- PHP 8.2 atau lebih baru.
+- MySQL.
+- Laravel Authentication.
+
+**Frontend:**
+- HTML5.
+- CSS3.
+- Bootstrap 5.
+- JavaScript.
+
+**Penyimpanan:**
+- Database MySQL untuk menyimpan informasi artikel.
+- Laravel Storage untuk menyimpan dokumen PDF.
+- Validasi tipe dan ukuran file yang diunggah.
+
+### 9. Struktur Database
+
+Database dirancang menggunakan beberapa tabel utama.
+
+**A. users**
+- id
+- name
+- email
+- password
+- role
+- created_at
+- updated_at
+
+**B. articles**
+- id
+- title
+- slug
+- authors
+- category_id
+- abstract
+- keywords
+- content
+- pdf_file
+- publication_date
+- status
+- created_at
+- updated_at
+
+**C. categories**
+- id
+- name
+- description
+- created_at
+- updated_at
+
+Relasi:
+- Satu kategori dapat memiliki banyak artikel.
+- Satu artikel hanya memiliki satu kategori.
+- Administrator bertanggung jawab terhadap pengelolaan artikel.
+
+### 10. Keamanan Sistem
+
+Website menerapkan beberapa mekanisme keamanan dasar:
+
+1. Autentikasi untuk administrator.
+2. Middleware untuk melindungi halaman dashboard.
+3. Pembatasan akses fitur administrator.
+4. Validasi input pengguna.
+5. Proteksi CSRF.
+6. Password disimpan menggunakan hashing.
+7. Validasi file PDF yang diunggah.
+8. Pengunjung hanya dapat melihat artikel yang berstatus Published.
+9. Administrator tidak dapat mengakses fitur administratif tanpa melakukan login.
+
+### 11. Kebutuhan Non-Fungsional
+
+- Website dapat diakses melalui browser modern.
+- Website memiliki waktu pemuatan yang wajar.
+- Tampilan responsif.
+- Data artikel tersimpan secara terstruktur.
+- Sistem mudah digunakan oleh administrator.
+- Website dapat dikembangkan kembali apabila jumlah artikel bertambah.
+
+### 12. Batasan Proyek
+
+Untuk menjaga pengembangan tetap sederhana, website tidak mencakup:
+
+- Registrasi akun pengunjung.
+- Sistem komentar.
+- Sistem pembayaran.
+- Sistem langganan jurnal.
+- Peer review online.
+- Pengiriman artikel oleh pengunjung.
+- Sistem notifikasi kompleks.
+- Integrasi DOI atau Crossref.
+- Sistem indeksasi jurnal otomatis.
+
+### 13. Kriteria Keberhasilan
+
+Website dinyatakan memenuhi kebutuhan apabila:
+
+1. Pengunjung dapat membuka halaman utama.
+2. Pengunjung dapat melihat daftar artikel.
+3. Pengunjung dapat mencari artikel.
+4. Pengunjung dapat membaca detail artikel.
+5. Pengunjung dapat mengunduh dokumen PDF.
+6. Administrator dapat login.
+7. Administrator dapat menambahkan artikel.
+8. Administrator dapat mengubah dan menghapus artikel.
+9. Artikel Draft tidak dapat dilihat oleh pengunjung.
+10. Halaman administrator tidak dapat diakses oleh pengunjung tanpa autentikasi.
+
+### 14. Hasil Akhir yang Diharapkan
+
+Hasil akhir proyek berupa website jurnal ilmiah sederhana berbasis Laravel dan MySQL yang dapat digunakan untuk mempublikasikan artikel penelitian secara digital.
+
+Website memiliki dua bagian utama, yaitu halaman publik untuk pembaca dan halaman administrator untuk mengelola publikasi.
+
+Dengan adanya sistem ini, artikel ilmiah dapat disimpan, dikelola, dan diakses secara lebih terstruktur melalui satu platform website.
