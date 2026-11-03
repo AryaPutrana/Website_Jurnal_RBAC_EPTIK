@@ -147,8 +147,8 @@
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ route('home.index') }}" target="_blank">
-                            <i class="bi bi-globe"></i> Beranda
+                        <a class="nav-link" href="{{ route('home.index') }}">
+                            <i class="bi bi-globe"></i> Lihat Website
                         </a>
                     </li>
                     <li class="nav-item dropdown">
