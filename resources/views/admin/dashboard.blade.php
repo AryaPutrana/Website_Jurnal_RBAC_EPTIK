@@ -5,7 +5,7 @@
 
 @section('content')
 <div class="row mb-4">
-    <div class="col-md-4">
+    <div class="col-md-3">
         <div class="card text-white bg-primary mb-3">
             <div class="card-body">
                 <div class="d-flex justify-content-between align-items-center">
@@ -18,7 +18,7 @@
             </div>
         </div>
     </div>
-    <div class="col-md-4">
+    <div class="col-md-3">
         <div class="card text-white bg-success mb-3">
             <div class="card-body">
                 <div class="d-flex justify-content-between align-items-center">
@@ -31,7 +31,7 @@
             </div>
         </div>
     </div>
-    <div class="col-md-4">
+    <div class="col-md-3">
         <div class="card text-white bg-info mb-3">
             <div class="card-body">
                 <div class="d-flex justify-content-between align-items-center">
@@ -41,6 +41,24 @@
                     </div>
                     <i class="bi bi-people fs-1"></i>
                 </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-white bg-warning mb-3">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="card-title mb-0">Pending Review</h6>
+                        <h2 class="mb-0 mt-2">{{ $pendingSubmissions }}</h2>
+                    </div>
+                    <i class="bi bi-clock-history fs-1"></i>
+                </div>
+            </div>
+            <div class="card-footer bg-transparent border-0">
+                <a href="{{ route('admin.submissions.index') }}" class="text-white text-decoration-none">
+                    <small><i class="bi bi-arrow-right-circle"></i> Lihat Submission</small>
+                </a>
             </div>
         </div>
     </div>

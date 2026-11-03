@@ -111,6 +111,51 @@
             border-radius: 20px;
             font-size: 0.85rem;
         }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .hero-section {
+                padding: 50px 0;
+            }
+            .hero-section h1 {
+                font-size: 2rem;
+            }
+            .hero-section p {
+                font-size: 1rem;
+            }
+            .section-title {
+                font-size: 1.5rem;
+            }
+            .navbar-custom .navbar-brand {
+                font-size: 1rem;
+            }
+            .footer {
+                margin-top: 50px;
+                padding: 30px 0 20px;
+            }
+            .card-article {
+                margin-bottom: 20px;
+            }
+        }
+
+        @media (max-width: 576px) {
+            .hero-section {
+                padding: 30px 0;
+            }
+            .hero-section h1 {
+                font-size: 1.5rem;
+            }
+            .hero-section p {
+                font-size: 0.9rem;
+            }
+            .btn-primary-custom {
+                font-size: 0.9rem;
+                padding: 8px 16px;
+            }
+            .section-title {
+                font-size: 1.25rem;
+            }
+        }
     </style>
     @stack('styles')
 </head>
