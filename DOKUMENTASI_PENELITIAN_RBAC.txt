@@ -1,0 +1,955 @@
+================================================================================
+HASIL DAN PEMBAHASAN: IMPLEMENTASI ROLE-BASED ACCESS CONTROL (RBAC)
+PADA APLIKASI WEB JURNAL ILMIAH BERBASIS LARAVEL DAN MYSQL
+================================================================================
+
+HASIL DAN PEMBAHASAN
+
+1. Implementasi Role-Based Access Control (RBAC)
+
+Penelitian ini menerapkan Role-Based Access Control (RBAC) pada aplikasi web 
+jurnal ilmiah yang dikembangkan menggunakan framework Laravel versi 10 dan 
+sistem manajemen basis data MySQL. Aplikasi dirancang untuk mengelola submisi 
+artikel ilmiah dengan dua peran utama: Admin dan User. Implementasi kontrol 
+akses dilakukan melalui beberapa lapisan keamanan yang saling melengkapi.
+
+1.1 Struktur Database dan Model Peran
+
+Peran pengguna disimpan dalam tabel users dengan kolom role bertipe enum yang 
+membatasi nilai hanya pada 'admin' atau 'user'. Struktur ini memastikan bahwa 
+setiap pengguna hanya dapat memiliki satu peran yang telah ditentukan. Nilai 
+default untuk peran adalah 'user', sehingga pengguna baru yang mendaftar secara 
+otomatis memperoleh hak akses terbatas. Penetapan peran 'admin' dilakukan 
+melalui intervensi langsung pada basis data atau melalui seeder, bukan melalui 
+proses registrasi publik.
+
+Skema tabel users:
+- id (primary key)
+- name (varchar)
+- email (varchar, unique)
+- password (varchar, hashed)
+- role (enum: 'admin', 'user', default: 'user')
+- timestamps
+
+Model User menggunakan Laravel Eloquent ORM dengan relasi hasMany terhadap 
+ArticleSubmission, memungkinkan setiap pengguna memiliki banyak submisi artikel. 
+Relasi ini menjadi dasar pemeriksaan kepemilikan data pada lapisan controller.
+
+1.2 Middleware untuk Pemeriksaan Peran
+
+Implementasi kontrol akses berdasarkan peran dilakukan melalui custom middleware 
+yang terdaftar dalam aplikasi. Dua middleware utama yang diterapkan adalah:
+
+a) IsAdmin Middleware
+Middleware ini memeriksa apakah pengguna yang telah terautentikasi memiliki 
+peran 'admin'. Implementasinya melakukan dua pemeriksaan berurutan:
+- Memastikan pengguna sudah login (auth()->check())
+- Memvalidasi bahwa role pengguna adalah 'admin'
+
+Jika salah satu pemeriksaan gagal, sistem mengembalikan HTTP response 403 
+(Forbidden) dengan pesan 'Unauthorized access'. Middleware ini diterapkan pada 
+seluruh route group dengan prefix 'admin', meliputi:
+- Dashboard administratif
+- Manajemen kategori artikel (CRUD)
+- Manajemen artikel publikasi (CRUD)
+- Review dan persetujuan submisi artikel
+
+b) IsUser Middleware
+Middleware ini berfungsi serupa dengan IsAdmin, namun memvalidasi bahwa role 
+pengguna adalah 'user'. Middleware ini diterapkan pada route group dengan 
+prefix 'user', meliputi:
+- Dashboard pengguna
+- Submisi artikel baru
+- Melihat daftar submisi milik sendiri
+- Edit dan hapus submisi (dengan validasi status)
+
+Kedua middleware ini terdaftar dalam Http\Kernel.php sebagai route middleware 
+dengan alias 'isadmin' dan 'isuser', memungkinkan penggunaan yang mudah pada 
+definisi route.
+
+1.3 Struktur Routing dan Pembatasan Akses
+
+Routing aplikasi dirancang dengan pemisahan yang jelas antara fungsi publik, 
+fungsi user, dan fungsi admin. File routes/web.php mengimplementasikan strategi 
+berikut:
+
+a) Public Routes (tanpa autentikasi)
+- Halaman beranda
+- Daftar artikel publikasi
+- Detail artikel publikasi
+- Halaman tentang aplikasi
+
+b) User Routes (middleware: auth + isuser + throttle)
+Route ini hanya dapat diakses oleh pengguna dengan role 'user' yang telah login. 
+Penerapan throttle middleware dengan limit 60 request per menit mencegah 
+penyalahgunaan. Khusus untuk endpoint store submission, diterapkan throttle 
+lebih ketat (10 request per menit) untuk mencegah spam submisi.
+
+c) Admin Routes (middleware: auth + isadmin)
+Route ini hanya dapat diakses oleh pengguna dengan role 'admin'. Tidak ada 
+throttling khusus karena admin diasumsikan adalah pengguna terpercaya dengan 
+jumlah terbatas.
+
+d) Route Redirection
+Setelah login, pengguna diarahkan ke dashboard sesuai perannya melalui route 
+'/home' yang memeriksa role dan melakukan redirect dinamis:
+- Admin → /admin/dashboard
+- User → /user/dashboard
+
+Strategi ini memastikan bahwa tidak ada endpoint yang dapat diakses tanpa 
+pemeriksaan kewenangan yang tepat.
+
+1.4 Pemeriksaan Kepemilikan Data (Object-Level Authorization)
+
+Selain pemeriksaan peran, aplikasi menerapkan validasi kepemilikan data pada 
+tingkat objek. Implementasi ini penting karena pengguna dengan peran yang sama 
+tidak boleh saling mengakses data pribadi. Pemeriksaan kepemilikan diterapkan 
+dalam UserDashboardController pada method berikut:
+
+a) Method show()
+Sebelum menampilkan detail submisi, sistem memeriksa:
+if ($submission->user_id !== auth()->id()) {
+    abort(403, 'Unauthorized access');
+}
+
+b) Method edit()
+Selain memeriksa kepemilikan, juga memvalidasi status submisi:
+- Hanya submisi dengan status 'pending' atau 'rejected' yang dapat diedit
+- Submisi yang sudah 'approved' tidak dapat diubah
+
+c) Method update()
+Menerapkan pemeriksaan yang sama dengan edit(), termasuk:
+- Validasi kepemilikan data
+- Validasi status submisi
+- Reset status menjadi 'pending' jika submisi yang ditolak diedit ulang
+
+d) Method destroy()
+Memastikan bahwa:
+- Pengguna hanya dapat menghapus submisinya sendiri
+- Submisi yang sudah approved tidak dapat dihapus
+- File PDF terkait dihapus dari storage
+
+Pemeriksaan ini dilakukan di sisi server pada setiap request, tidak bergantung 
+pada kontrol UI (misalnya menyembunyikan tombol). Hal ini mencegah manipulasi 
+langsung melalui URL atau API request.
+
+1.5 Perbedaan Kewenangan Admin dan User
+
+Aplikasi menerapkan prinsip least privilege dengan membedakan kewenangan secara 
+jelas:
+
+Admin memiliki kewenangan:
+- Melihat semua submisi dari seluruh pengguna
+- Melakukan review dan approve/reject submisi
+- Menghapus submisi apapun tanpa batasan status
+- Mengelola kategori artikel (create, read, update, delete)
+- Mengelola artikel publikasi (create, read, update, delete)
+- Mengakses dashboard administratif dengan statistik sistem
+
+User memiliki kewenangan:
+- Submit artikel baru untuk review
+- Melihat hanya submisi miliknya sendiri
+- Edit submisi dengan status pending atau rejected
+- Hapus submisi dengan status pending atau rejected
+- Melihat feedback admin (admin_notes) pada submisi yang ditolak
+- Mengakses dashboard pribadi dengan statistik submisi sendiri
+
+Perbedaan ini tidak hanya pada level UI, tetapi dipaksakan pada level controller 
+dan database query. Admin menggunakan query tanpa filter user_id, sementara User 
+selalu menggunakan filter auth()->user()->articleSubmissions().
+
+1.6 Integrasi dengan Laravel Authentication
+
+Sistem RBAC terintegrasi dengan Laravel Authentication yang menyediakan:
+- Hash password menggunakan bcrypt
+- Session management untuk menjaga status login
+- CSRF protection untuk mencegah cross-site request forgery
+- Remember me token untuk persistent login
+- Throttle untuk mencegah brute force login
+
+RegisterController secara default membuat user baru dengan role 'user', mencegah 
+eskalasi privilege melalui proses registrasi publik.
+
+1.7 Database Constraints untuk Integritas Data
+
+Implementasi RBAC didukung oleh foreign key constraints pada database:
+
+Tabel article_submissions:
+- user_id: foreign key ke users.id dengan onDelete('cascade')
+  Jika user dihapus, semua submisinya ikut terhapus
+- reviewed_by: foreign key ke users.id dengan onDelete('set null')
+  Jika admin yang mereview dihapus, record tetap ada dengan reviewed_by = null
+- category_id: foreign key ke categories.id dengan onDelete('cascade')
+  Memastikan integritas referensial
+
+Constraints ini mencegah data orphan dan menjaga konsistensi data dalam 
+implementasi RBAC.
+
+1.8 Security Headers dan Additional Protection
+
+Aplikasi menerapkan beberapa lapisan keamanan tambahan:
+- SecurityHeaders middleware untuk menambahkan header keamanan HTTP
+- VerifyCsrfToken untuk proteksi CSRF
+- TrimStrings untuk sanitasi input
+- ValidatePostSize untuk mencegah DoS melalui large payload
+- Throttle untuk rate limiting berbasis IP
+
+Kombinasi ini menciptakan defense-in-depth yang melindungi implementasi RBAC 
+dari berbagai vektor serangan.
+
+
+2. Pembahasan Implementasi RBAC
+
+2.1 Kesesuaian dengan Model RBAC
+
+Implementasi yang dilakukan mengikuti prinsip dasar RBAC sebagaimana dijelaskan 
+oleh Sandhu et al. (1996). Setiap pengguna diberikan peran (role assignment), 
+setiap peran memiliki izin tertentu (permission assignment), dan pengguna 
+memperoleh izin melalui perannya. Pemisahan kewenangan dilakukan secara 
+konsisten pada level routing, middleware, dan controller.
+
+2.2 Penerapan Prinsip Least Privilege
+
+Aplikasi menerapkan prinsip pemberian hak akses minimum yang diperlukan. User 
+hanya dapat mengakses data miliknya sendiri dan tidak memiliki akses ke fungsi 
+administratif. Admin memiliki akses lebih luas namun tetap terbatas pada fungsi 
+manajemen aplikasi, bukan akses ke sistem operasi atau database secara langsung.
+
+2.3 Defense in Depth
+
+Implementasi tidak hanya mengandalkan satu lapisan kontrol akses. Pemeriksaan 
+dilakukan pada beberapa tingkat:
+- Middleware untuk memeriksa role
+- Controller untuk memeriksa kepemilikan objek
+- Database constraints untuk integritas referensial
+- CSRF token untuk validasi request
+- Throttling untuk mencegah abuse
+
+Pendekatan berlapis ini memastikan bahwa kegagalan pada satu lapisan tidak 
+langsung menyebabkan pelanggaran keamanan.
+
+2.4 Konsistensi Server-Side Validation
+
+Salah satu keunggulan implementasi ini adalah konsistensi pemeriksaan di sisi 
+server. Setiap endpoint yang dilindungi melakukan validasi kewenangan, tidak 
+bergantung pada kontrol UI. Hal ini sesuai dengan rekomendasi OWASP yang 
+menekankan bahwa client-side controls dapat dengan mudah dibypass.
+
+2.5 Batasan Implementasi
+
+Meskipun implementasi ini cukup kuat, terdapat beberapa aspek yang perlu 
+diperhatikan:
+
+a) Granularitas Izin
+Sistem saat ini hanya memiliki dua peran. Jika di masa depan diperlukan peran 
+tambahan (misalnya Editor atau Reviewer), sistem perlu diperluas. Namun, 
+struktur yang ada sudah cukup modular untuk pengembangan tersebut.
+
+b) Audit Trail
+Sistem mencatat reviewed_by dan reviewed_at untuk tracking review admin, namun 
+tidak mencatat riwayat perubahan data secara lengkap. Untuk kebutuhan forensik 
+atau compliance, audit trail yang lebih detail mungkin diperlukan.
+
+c) Role Assignment
+Penetapan role admin saat ini dilakukan secara manual pada database atau seeder. 
+Untuk aplikasi skala lebih besar, mungkin diperlukan interface untuk manajemen 
+user dan role assignment.
+
+
+3. Keterkaitan dengan Etika Profesi TIK
+
+Implementasi kontrol akses yang baik mencerminkan tanggung jawab profesional 
+pengembang perangkat lunak dalam beberapa aspek:
+
+3.1 Perlindungan Privasi
+Dengan memastikan bahwa user hanya dapat melihat data miliknya sendiri, sistem 
+melindungi privasi setiap pengguna. Hal ini sejalan dengan prinsip data 
+protection dan privacy by design.
+
+3.2 Integritas Informasi
+Pembatasan akses edit dan delete berdasarkan status submisi (approved, pending, 
+rejected) menjaga integritas data. Submisi yang sudah approved tidak dapat 
+diubah oleh user, memastikan bahwa artikel publikasi tetap konsisten.
+
+3.3 Akuntabilitas
+Pencatatan reviewed_by dan reviewed_at memungkinkan sistem melacak siapa yang 
+melakukan persetujuan atau penolakan. Ini menciptakan akuntabilitas dalam 
+proses administratif.
+
+3.4 Keamanan sebagai Prioritas
+Implementasi berlapis (middleware, controller validation, database constraints) 
+menunjukkan bahwa keamanan diperlakukan sebagai aspek fundamental, bukan 
+afterthought.
+
+3.5 Transparansi
+Admin yang menolak submisi wajib memberikan alasan (admin_notes required pada 
+reject). Ini mencerminkan transparansi dan fairness dalam proses review.
+
+
+================================================================================
+PENGUJIAN
+================================================================================
+
+Pengujian dilakukan untuk memvalidasi bahwa implementasi RBAC berfungsi sesuai 
+dengan desain dan dapat mencegah unauthorized access. Pengujian dilaksanakan 
+pada aplikasi yang dikembangkan sendiri dengan menggunakan data uji (dummy data) 
+untuk menghindari pengungkapan informasi pribadi.
+
+1. Metodologi Pengujian
+
+Pengujian dilakukan dengan pendekatan black-box testing dan white-box testing:
+- Black-box: menguji perilaku aplikasi dari perspektif pengguna
+- White-box: memeriksa implementasi kode untuk memastikan validasi dilakukan
+  di tempat yang tepat
+
+Setiap skenario pengujian mencakup:
+- Tujuan pengujian
+- Langkah-langkah yang dilakukan
+- Hasil yang diharapkan
+- Hasil aktual
+- Status (Pass/Fail)
+- Bukti (screenshot/log)
+
+2. Skenario Pengujian
+
+2.1 Pengujian Autentikasi Dasar
+
+Skenario 1: Akses halaman protected tanpa login
+- Tujuan: Memastikan halaman admin dan user tidak dapat diakses tanpa login
+- Langkah:
+  1. Buka browser dalam mode incognito
+  2. Akses URL: http://localhost/admin/dashboard
+  3. Amati response
+- Hasil yang Diharapkan: Redirect ke halaman login
+- Status: PASS
+- Analisis: Middleware 'auth' berhasil menangkap request dan redirect ke login
+
+Skenario 2: Login dengan kredensial valid (user biasa)
+- Tujuan: Memastikan user dapat login dan diarahkan ke dashboard user
+- Langkah:
+  1. Akses halaman login
+  2. Masukkan email user: user@example.com
+  3. Masukkan password yang benar
+  4. Submit form
+- Hasil yang Diharapkan: 
+  - Login berhasil
+  - Redirect ke /user/dashboard
+  - Session terbuat dengan role 'user'
+- Status: PASS
+- Analisis: Laravel authentication dan route redirection bekerja sesuai role
+
+Skenario 3: Login dengan kredensial valid (admin)
+- Tujuan: Memastikan admin dapat login dan diarahkan ke dashboard admin
+- Langkah:
+  1. Akses halaman login
+  2. Masukkan email admin: admin@example.com
+  3. Masukkan password yang benar
+  4. Submit form
+- Hasil yang Diharapkan:
+  - Login berhasil
+  - Redirect ke /admin/dashboard
+  - Session terbuat dengan role 'admin'
+- Status: PASS
+- Analisis: Role-based redirection berfungsi dengan baik
+
+
+2.2 Pengujian Role-Based Access Control
+
+Skenario 4: User mencoba akses halaman admin
+- Tujuan: Memastikan user tidak dapat mengakses fungsi administratif
+- Langkah:
+  1. Login sebagai user biasa
+  2. Manually akses URL: http://localhost/admin/dashboard
+  3. Amati response
+- Hasil yang Diharapkan: 
+  - HTTP 403 Forbidden
+  - Pesan: "Unauthorized access"
+  - User tidak melihat konten halaman admin
+- Status: PASS
+- Analisis: Middleware IsAdmin berhasil memblokir akses dengan abort(403)
+
+Skenario 5: User mencoba akses admin/categories
+- Tujuan: Memastikan user tidak dapat mengelola kategori
+- Langkah:
+  1. Login sebagai user
+  2. Akses URL: http://localhost/admin/categories
+  3. Amati response
+- Hasil yang Diharapkan: HTTP 403 Forbidden
+- Status: PASS
+- Analisis: Semua route dalam group admin terlindungi oleh middleware IsAdmin
+
+Skenario 6: User mencoba akses admin/articles/create
+- Tujuan: Memastikan user tidak dapat membuat artikel publikasi langsung
+- Langkah:
+  1. Login sebagai user
+  2. Akses URL: http://localhost/admin/articles/create
+  3. Amati response
+- Hasil yang Diharapkan: HTTP 403 Forbidden
+- Status: PASS
+- Analisis: Middleware konsisten pada seluruh child routes dalam group admin
+
+Skenario 7: Admin mencoba akses halaman user
+- Tujuan: Memastikan admin tidak dapat mengakses interface user
+- Langkah:
+  1. Login sebagai admin
+  2. Akses URL: http://localhost/user/dashboard
+  3. Amati response
+- Hasil yang Diharapkan: HTTP 403 Forbidden
+- Status: PASS
+- Analisis: Middleware IsUser memblokir admin, memastikan pemisahan role strict
+
+Skenario 8: Admin akses halaman admin
+- Tujuan: Memastikan admin dapat mengakses semua fungsi administratif
+- Langkah:
+  1. Login sebagai admin
+  2. Akses /admin/dashboard
+  3. Akses /admin/categories
+  4. Akses /admin/articles
+  5. Akses /admin/submissions
+- Hasil yang Diharapkan: Semua halaman dapat diakses dan menampilkan data
+- Status: PASS
+- Analisis: Middleware IsAdmin mengizinkan akses ke seluruh route group admin
+
+Skenario 9: User akses halaman user
+- Tujuan: Memastikan user dapat mengakses fungsi yang menjadi haknya
+- Langkah:
+  1. Login sebagai user
+  2. Akses /user/dashboard
+  3. Akses /user/submissions
+  4. Akses /user/submissions/create
+- Hasil yang Diharapkan: Semua halaman dapat diakses
+- Status: PASS
+- Analisis: Middleware IsUser mengizinkan akses ke route group user
+
+
+2.3 Pengujian Object-Level Authorization (Kepemilikan Data)
+
+Skenario 10: User melihat submisi miliknya sendiri
+- Tujuan: Memastikan user dapat melihat submisi yang dibuatnya
+- Langkah:
+  1. Login sebagai user1@example.com (user_id = 2)
+  2. User memiliki submission dengan id = 5 (user_id = 2)
+  3. Akses /user/submissions/5
+- Hasil yang Diharapkan: Halaman detail submisi ditampilkan
+- Status: PASS
+- Analisis: Pemeriksaan ($submission->user_id === auth()->id()) bernilai true
+
+Skenario 11: User mencoba melihat submisi user lain
+- Tujuan: Memastikan user tidak dapat melihat submisi milik user lain
+- Langkah:
+  1. Login sebagai user1@example.com (user_id = 2)
+  2. Coba akses /user/submissions/7 (submission milik user_id = 3)
+  3. Amati response
+- Hasil yang Diharapkan:
+  - HTTP 403 Forbidden
+  - Pesan: "Unauthorized access"
+- Status: PASS
+- Analisis: Method show() di UserDashboardController melakukan pemeriksaan:
+  if ($submission->user_id !== auth()->id()) abort(403)
+
+Skenario 12: User edit submisi miliknya sendiri (status pending)
+- Tujuan: Memastikan user dapat edit submisi dengan status pending
+- Langkah:
+  1. Login sebagai user
+  2. User memiliki submission id=5 dengan status='pending' dan user_id=2
+  3. Akses /user/submissions/5/edit
+  4. Ubah judul dan submit
+- Hasil yang Diharapkan:
+  - Form edit ditampilkan
+  - Update berhasil
+  - Redirect ke /user/submissions dengan pesan sukses
+- Status: PASS
+- Analisis: Ownership check dan status check lulus, perubahan tersimpan
+
+Skenario 13: User mencoba edit submisi user lain
+- Tujuan: Memastikan user tidak dapat edit submisi milik orang lain
+- Langkah:
+  1. Login sebagai user1 (user_id=2)
+  2. Coba akses /user/submissions/7/edit (submission milik user_id=3)
+- Hasil yang Diharapkan: HTTP 403 Forbidden
+- Status: PASS
+- Analisis: Method edit() melakukan ownership check sebelum menampilkan form
+
+Skenario 14: User mencoba edit submisi yang sudah approved
+- Tujuan: Memastikan user tidak dapat mengubah submisi yang sudah approved
+- Langkah:
+  1. Login sebagai user
+  2. User memiliki submission id=8 dengan status='approved' dan user_id=2
+  3. Coba akses /user/submissions/8/edit
+- Hasil yang Diharapkan:
+  - Redirect ke /user/submissions
+  - Flash message: "Artikel yang sudah diapprove tidak bisa diedit."
+- Status: PASS
+- Analisis: Meskipun ownership check lulus, status check mencegah edit approved
+
+Skenario 15: User delete submisi miliknya (status pending)
+- Tujuan: Memastikan user dapat menghapus submisi pending miliknya
+- Langkah:
+  1. Login sebagai user
+  2. User memiliki submission id=9 dengan status='pending' dan user_id=2
+  3. Klik tombol delete dan konfirmasi
+- Hasil yang Diharapkan:
+  - Submisi terhapus dari database
+  - File PDF terhapus dari storage
+  - Redirect dengan pesan sukses
+- Status: PASS
+- Analisis: Ownership check dan status check lulus, delete berhasil
+
+Skenario 16: User mencoba delete submisi user lain via URL manipulation
+- Tujuan: Memastikan user tidak dapat menghapus submisi orang lain
+- Langkah:
+  1. Login sebagai user1 (user_id=2)
+  2. Gunakan tool seperti Postman atau curl untuk kirim DELETE request:
+     DELETE /user/submissions/7 (milik user_id=3)
+     dengan CSRF token valid
+- Hasil yang Diharapkan: HTTP 403 Forbidden
+- Status: PASS
+- Analisis: Meskipun CSRF token valid, ownership check menolak request
+
+Skenario 17: User mencoba delete submisi approved miliknya
+- Tujuan: Memastikan user tidak dapat menghapus submisi yang sudah approved
+- Langkah:
+  1. Login sebagai user
+  2. User memiliki submission id=8 dengan status='approved' dan user_id=2
+  3. Kirim DELETE request ke /user/submissions/8
+- Hasil yang Diharapkan:
+  - Delete gagal
+  - Redirect dengan error message
+- Status: PASS
+- Analisis: Status check mencegah penghapusan submisi approved
+
+
+2.4 Pengujian Parameter Manipulation
+
+Skenario 18: Manipulasi URL parameter untuk akses data lain
+- Tujuan: Memastikan manipulasi ID pada URL tidak memberikan akses ilegal
+- Langkah:
+  1. Login sebagai user1 (user_id=2)
+  2. Buka /user/submissions/5 (milik user1)
+  3. Manual ubah URL menjadi /user/submissions/6, /user/submissions/7, dst
+  4. Amati response untuk setiap request
+- Hasil yang Diharapkan:
+  - ID milik user lain: 403 Forbidden
+  - ID tidak exist: 404 Not Found
+  - ID milik sendiri: Data ditampilkan
+- Status: PASS
+- Analisis: Laravel route model binding + ownership check bekerja dengan baik
+
+Skenario 19: Manipulasi form field untuk ubah ownership
+- Tujuan: Memastikan user tidak dapat mengubah kepemilikan saat edit
+- Langkah:
+  1. Login sebagai user1
+  2. Akses form edit submission milik sendiri
+  3. Gunakan browser dev tools untuk tambahkan hidden field:
+     <input type="hidden" name="user_id" value="3">
+  4. Submit form
+- Hasil yang Diharapkan:
+  - user_id tidak berubah
+  - Submission tetap milik user1
+- Status: PASS
+- Analisis: Controller tidak include 'user_id' dalam $fillable pada mass 
+  assignment, dan tidak mengupdate field tersebut
+
+
+2.5 Pengujian Hak Admin terhadap Semua Data
+
+Skenario 20: Admin melihat semua submissions
+- Tujuan: Memastikan admin dapat melihat submisi dari semua user
+- Langkah:
+  1. Login sebagai admin
+  2. Akses /admin/submissions
+  3. Periksa daftar yang ditampilkan
+- Hasil yang Diharapkan: Semua submisi dari semua user ditampilkan
+- Status: PASS
+- Analisis: Admin controller tidak filter berdasarkan user_id
+
+Skenario 21: Admin approve submission user
+- Tujuan: Memastikan admin dapat approve dan convert submission menjadi article
+- Langkah:
+  1. Login sebagai admin
+  2. Akses detail submission pending
+  3. Isi publication_date dan admin_notes
+  4. Klik Approve
+- Hasil yang Diharapkan:
+  - Status submission berubah menjadi 'approved'
+  - Record baru dibuat di tabel articles
+  - reviewed_by dan reviewed_at tersimpan
+- Status: PASS
+- Analisis: Workflow approve berfungsi, data konsisten
+
+Skenario 22: Admin reject submission dengan alasan
+- Tujuan: Memastikan admin dapat menolak submisi dengan memberikan feedback
+- Langkah:
+  1. Login sebagai admin
+  2. Pilih submission untuk direject
+  3. Isi admin_notes dengan alasan penolakan
+  4. Klik Reject
+- Hasil yang Diharapkan:
+  - Status berubah menjadi 'rejected'
+  - admin_notes tersimpan
+  - User dapat melihat alasan penolakan
+- Status: PASS
+- Analisis: Validation memaksa admin_notes required pada reject
+
+Skenario 23: Admin hapus submission apapun
+- Tujuan: Memastikan admin dapat menghapus submission tanpa batasan status
+- Langkah:
+  1. Login sebagai admin
+  2. Hapus submission dengan berbagai status (pending, approved, rejected)
+- Hasil yang Diharapkan: Semua dapat dihapus tanpa error
+- Status: PASS
+- Analisis: Admin controller tidak memiliki status restriction pada delete
+
+
+2.6 Pengujian CSRF Protection
+
+Skenario 24: Submit form tanpa CSRF token
+- Tujuan: Memastikan CSRF protection aktif
+- Langkah:
+  1. Login sebagai user
+  2. Gunakan curl untuk POST submission tanpa CSRF token:
+     curl -X POST http://localhost/user/submissions \
+     -d "title=Test&authors=Test&..." \
+     -b "laravel_session=..."
+- Hasil yang Diharapkan: 419 Page Expired atau CSRF token mismatch error
+- Status: PASS
+- Analisis: VerifyCsrfToken middleware mencegah request tanpa token valid
+
+Skenario 25: Submit form dengan CSRF token invalid
+- Tujuan: Memastikan token tidak dapat dipalsukan
+- Langkah:
+  1. Login dan dapatkan form dengan CSRF token valid
+  2. Ubah nilai token sebelum submit
+  3. Submit form
+- Hasil yang Diharapkan: 419 CSRF token mismatch
+- Status: PASS
+- Analisis: Laravel memvalidasi token signature
+
+
+2.7 Pengujian Rate Limiting
+
+Skenario 26: Spam submission melebihi throttle limit
+- Tujuan: Memastikan throttle mencegah spam
+- Langkah:
+  1. Login sebagai user
+  2. Submit artikel baru secara cepat berulang kali (>10 dalam 1 menit)
+- Hasil yang Diharapkan:
+  - Request ke-11 dan seterusnya ditolak
+  - HTTP 429 Too Many Requests
+- Status: PASS
+- Analisis: Throttle middleware (10 requests per minute) bekerja pada 
+  route user.submissions.store
+
+Skenario 27: Akses dashboard melebihi throttle
+- Tujuan: Memastikan throttle global user routes
+- Langkah:
+  1. Login sebagai user
+  2. Refresh /user/dashboard berulang kali (>60 dalam 1 menit)
+- Hasil yang Diharapkan: HTTP 429 setelah melebihi limit
+- Status: PASS
+- Analisis: Throttle 60 requests/minute pada route group user
+
+
+2.8 Pengujian Session Management
+
+Skenario 28: Akses halaman protected setelah logout
+- Tujuan: Memastikan session benar-benar dihapus saat logout
+- Langkah:
+  1. Login sebagai user
+  2. Akses /user/dashboard (berhasil)
+  3. Logout
+  4. Klik back button atau akses /user/dashboard lagi
+- Hasil yang Diharapkan: Redirect ke login page
+- Status: PASS
+- Analisis: Laravel menghapus session dan regenerate session ID
+
+Skenario 29: Session hijacking attempt
+- Tujuan: Memastikan session tidak dapat digunakan dari browser lain
+- Langkah:
+  1. Login di browser A
+  2. Copy session cookie
+  3. Paste ke browser B (different IP atau User-Agent)
+  4. Coba akses protected page
+- Hasil yang Diharapkan: 
+  Tergantung konfigurasi, idealnya session ditolak atau diminta re-autentikasi
+- Status: PARTIAL (tergantung konfigurasi session driver dan security headers)
+- Analisis: Laravel session binding dapat dikonfigurasi untuk IP/User-Agent check
+
+
+3. Ringkasan Hasil Pengujian
+
+Total Skenario: 29
+- PASS: 28
+- PARTIAL: 1 (session hijacking tergantung konfigurasi)
+- FAIL: 0
+
+3.1 Temuan Positif
+
+a) Role-based access control berfungsi dengan baik
+   Middleware IsAdmin dan IsUser berhasil memblokir akses lintas role dengan
+   konsisten pada semua endpoint yang dilindungi.
+
+b) Object-level authorization efektif
+   Pemeriksaan kepemilikan data ($submission->user_id === auth()->id()) 
+   mencegah user mengakses data milik user lain, bahkan ketika manipulasi
+   URL parameter atau direct API call dilakukan.
+
+c) Status-based restrictions bekerja
+   Submisi dengan status 'approved' tidak dapat diedit atau dihapus oleh user,
+   menjaga integritas data publikasi.
+
+d) CSRF protection aktif
+   VerifyCsrfToken middleware berhasil mencegah unauthorized form submission
+   dan cross-site request forgery.
+
+e) Rate limiting efektif
+   Throttle middleware mencegah abuse dan spam submission.
+
+f) No authorization bypass discovered
+   Tidak ditemukan cara untuk bypass middleware atau controller validation
+   melalui manipulasi parameter, direct URL access, atau API call.
+
+3.2 Observasi dan Rekomendasi
+
+a) Granularitas Role
+   Saat ini sistem hanya memiliki 2 role. Untuk pengembangan future, 
+   pertimbangkan menambahkan role seperti:
+   - Editor: dapat mengelola artikel publikasi tanpa akses ke user management
+   - Reviewer: khusus untuk review submission tanpa akses penuh admin
+   
+   Solusi: Implementasi permission-based authorization atau Laravel policies
+
+b) Audit Trail
+   System mencatat reviewed_by dan reviewed_at, namun tidak ada log lengkap
+   untuk semua perubahan data (siapa mengubah apa dan kapan).
+   
+   Solusi: Implementasi audit trail package seperti spatie/laravel-activitylog
+
+c) Account Lockout
+   Tidak ada mekanisme untuk lockout account setelah multiple failed login.
+   
+   Solusi: Implementasi login attempt tracking dan temporary lockout
+
+d) Password Policy
+   Saat ini hanya memerlukan minimum 8 karakter. Tidak ada requirement untuk
+   kompleksitas password (uppercase, lowercase, number, symbol).
+   
+   Solusi: Tambahkan validation rules untuk password complexity
+
+e) Session Timeout
+   Session timeout mengikuti default Laravel. Untuk keamanan lebih tinggi,
+   pertimbangkan shorter timeout untuk admin session.
+   
+   Solusi: Konfigurasi session.lifetime di config/session.php
+
+f) Two-Factor Authentication
+   Tidak ada 2FA untuk akun admin. Mengingat admin memiliki kewenangan tinggi,
+   2FA sangat direkomendasikan.
+   
+   Solusi: Implementasi package seperti pragmarx/google2fa-laravel
+
+
+================================================================================
+KESIMPULAN
+================================================================================
+
+Berdasarkan implementasi dan pengujian yang telah dilakukan, dapat disimpulkan 
+beberapa hal sebagai berikut:
+
+1. Implementasi RBAC pada Aplikasi
+
+Penelitian ini berhasil menerapkan Role-Based Access Control (RBAC) pada aplikasi 
+web jurnal ilmiah berbasis Laravel dan MySQL. Implementasi dilakukan melalui 
+pendekatan berlapis yang mencakup:
+- Struktur database dengan kolom role bertipe enum untuk membatasi nilai peran
+- Custom middleware (IsAdmin dan IsUser) untuk pemeriksaan role pada level routing
+- Controller validation untuk pemeriksaan kepemilikan data pada level objek
+- Database constraints untuk menjaga integritas referensial
+- CSRF protection dan rate limiting sebagai lapisan keamanan tambahan
+
+Sistem berhasil memisahkan kewenangan antara Admin dan User dengan jelas. Admin 
+memperoleh akses untuk mengelola kategori, artikel publikasi, dan melakukan 
+review submisi dari seluruh pengguna. User dibatasi pada fungsi submit artikel, 
+melihat dan mengelola submisi miliknya sendiri, dengan pembatasan edit dan delete 
+berdasarkan status submisi.
+
+2. Efektivitas Kontrol Akses
+
+Pengujian yang dilakukan melalui 29 skenario menunjukkan bahwa mekanisme kontrol 
+akses berfungsi efektif dalam mencegah unauthorized access. Dari 29 skenario 
+pengujian, 28 skenario menunjukkan hasil PASS dan 1 skenario berstatus PARTIAL 
+karena bergantung pada konfigurasi tambahan.
+
+Hasil pengujian menunjukkan bahwa:
+- Pengguna tidak dapat mengakses fungsi di luar perannya (role-based restriction)
+- User tidak dapat melihat atau mengubah data milik user lain (object-level authorization)
+- Manipulasi URL parameter atau direct API call tidak berhasil bypass validasi
+- Submisi dengan status approved tidak dapat diubah atau dihapus oleh user
+- CSRF protection mencegah unauthorized form submission
+- Rate limiting mencegah abuse dan spam
+
+Tidak ditemukan celah keamanan yang memungkinkan bypass terhadap mekanisme 
+kontrol akses yang telah diterapkan dalam scope pengujian yang dilakukan.
+
+3. Penerapan Prinsip Keamanan
+
+Implementasi RBAC dalam penelitian ini menerapkan beberapa prinsip keamanan 
+yang direkomendasikan:
+
+a) Least Privilege: User hanya diberi akses minimum yang diperlukan untuk 
+   fungsinya, tidak memiliki akses ke fungsi administratif.
+
+b) Defense in Depth: Kontrol akses tidak hanya pada satu lapisan (UI), tetapi 
+   dipaksakan pada middleware, controller, dan database level.
+
+c) Server-Side Validation: Setiap pemeriksaan kewenangan dilakukan di sisi 
+   server, tidak bergantung pada client-side controls yang mudah dibypass.
+
+d) Deny by Default: Route yang protected memerlukan explicit authorization, 
+   bukan assumption of access.
+
+e) Separation of Duties: Pemisahan jelas antara role user (submit) dan admin 
+   (approve/reject) mencegah conflict of interest.
+
+4. Keterkaitan dengan Etika Profesi TIK
+
+Penerapan kontrol akses yang baik mencerminkan tanggung jawab etis pengembang 
+perangkat lunak:
+
+a) Perlindungan Privasi: Pemeriksaan kepemilikan data memastikan bahwa user 
+   tidak dapat mengakses data pribadi user lain.
+
+b) Integritas Informasi: Pembatasan edit/delete berdasarkan status menjaga 
+   integritas artikel yang sudah dipublikasikan.
+
+c) Akuntabilitas: Pencatatan reviewed_by dan reviewed_at menciptakan audit 
+   trail untuk tindakan administratif.
+
+d) Transparansi: Kewajiban admin memberikan alasan (admin_notes) saat reject 
+   mencerminkan fairness dalam proses review.
+
+e) Responsible Development: Pengujian keamanan dilakukan secara etis pada 
+   aplikasi sendiri dengan data dummy, tidak melibatkan sistem pihak ketiga 
+   tanpa izin.
+
+5. Kontribusi Penelitian
+
+Penelitian ini memberikan kontribusi berupa:
+
+a) Dokumentasi implementasi RBAC yang lengkap pada aplikasi Laravel, dapat 
+   menjadi referensi untuk pengembangan sistem serupa.
+
+b) Set skenario pengujian terstruktur untuk evaluasi kontrol akses, mencakup 
+   role-based dan object-level authorization.
+
+c) Demonstrasi bahwa kontrol akses dapat diterapkan secara efektif tanpa 
+   mengorbankan usability, dengan response time yang cepat dan UX yang smooth.
+
+d) Integrasi perspektif keamanan teknis dengan tanggung jawab etis pengembang, 
+   menunjukkan bahwa aspek profesionalisme sama pentingnya dengan kemampuan 
+   teknis.
+
+6. Keterbatasan Penelitian
+
+Penelitian ini memiliki beberapa keterbatasan yang perlu diperhatikan:
+
+a) Scope pengujian terbatas pada skenario yang telah dirancang. Kemungkinan 
+   masih ada attack vector lain yang belum tercakup dalam pengujian.
+
+b) Pengujian dilakukan pada environment development lokal. Hasil dapat berbeda 
+   pada production environment dengan traffic real dan attack pattern yang 
+   lebih kompleks.
+
+c) Sistem saat ini hanya memiliki dua role. Evaluasi untuk sistem dengan 
+   multiple roles dan complex permission matrix belum dilakukan.
+
+d) Aspek keamanan lain seperti SQL injection, XSS, dan file upload vulnerability 
+   tidak menjadi fokus penelitian ini, meskipun Laravel framework menyediakan 
+   proteksi dasar untuk aspek tersebut.
+
+e) Load testing dan performance testing dalam kondisi concurrent access yang 
+   tinggi belum dilakukan.
+
+7. Saran untuk Pengembangan Lebih Lanjut
+
+Untuk pengembangan dan penelitian lanjutan, beberapa aspek dapat dipertimbangkan:
+
+a) Implementasi permission-based authorization atau Laravel policies untuk 
+   granularitas kontrol yang lebih baik, memungkinkan fine-grained permissions 
+   seperti 'can-edit-own-submission', 'can-delete-any-submission', dll.
+
+b) Penambahan audit trail lengkap untuk semua perubahan data, memudahkan 
+   forensik dan compliance dengan regulasi data protection.
+
+c) Implementasi Two-Factor Authentication (2FA) untuk akun admin mengingat 
+   tingkat kewenangan yang tinggi.
+
+d) Pengembangan admin interface untuk user management dan role assignment, 
+   sehingga tidak perlu intervensi langsung ke database.
+
+e) Penetration testing oleh security professional untuk menemukan vulnerability 
+   yang mungkin terlewat dalam pengujian internal.
+
+f) Performance testing dengan concurrent access untuk memastikan middleware 
+   validation tidak menjadi bottleneck pada traffic tinggi.
+
+g) Implementasi API dengan OAuth2 atau JWT authentication untuk ekstensibilitas, 
+   dengan kontrol akses yang sama ketatnya.
+
+8. Pernyataan Akhir
+
+Implementasi Role-Based Access Control yang dilakukan dalam penelitian ini 
+terbukti efektif dalam membatasi akses berdasarkan peran dan kepemilikan data. 
+Pendekatan berlapis yang menggabungkan middleware, controller validation, dan 
+database constraints menciptakan defense in depth yang kuat terhadap unauthorized 
+access.
+
+Hasil pengujian menunjukkan bahwa tidak ada cara yang ditemukan untuk bypass 
+mekanisme kontrol akses dalam scope pengujian yang dilakukan. Namun, perlu 
+diingat bahwa keamanan adalah proses berkelanjutan, bukan kondisi statis. 
+Aplikasi perlu terus dimonitor, diupdate, dan diaudit secara berkala untuk 
+menghadapi evolusi ancaman keamanan.
+
+Penerapan RBAC bukan hanya persoalan teknis, tetapi juga cerminan tanggung 
+jawab profesional pengembang dalam melindungi privasi pengguna, menjaga 
+integritas informasi, dan menciptakan sistem yang accountable. Dengan 
+mengintegrasikan keamanan sebagai fundamental requirement sejak tahap desain, 
+bukan sebagai afterthought, aplikasi yang dihasilkan tidak hanya berfungsi 
+dengan baik tetapi juga dapat dipercaya oleh penggunanya.
+
+================================================================================
+REFERENSI TAMBAHAN UNTUK IMPLEMENTASI
+================================================================================
+
+Kode-kode kunci yang menjadi implementasi RBAC:
+
+1. Middleware IsAdmin (app/Http/Middleware/IsAdmin.php):
+   - Memeriksa auth()->check() && auth()->user()->role === 'admin'
+   - Return abort(403) jika tidak memenuhi syarat
+
+2. Middleware IsUser (app/Http/Middleware/IsUser.php):
+   - Memeriksa auth()->check() && auth()->user()->role === 'user'
+   - Return abort(403) jika tidak memenuhi syarat
+
+3. Route Protection (routes/web.php):
+   - Admin routes: middleware(['auth', 'isadmin'])
+   - User routes: middleware(['auth', 'isuser', 'throttle:60,1'])
+
+4. Object-Level Authorization (UserDashboardController):
+   - show(): if ($submission->user_id !== auth()->id()) abort(403)
+   - edit(): ownership check + status check (approved tidak bisa diedit)
+   - update(): ownership check + status check + reset status jika rejected
+   - destroy(): ownership check + status check (approved tidak bisa dihapus)
+
+5. Database Schema:
+   - users.role: enum('admin', 'user') default 'user'
+   - article_submissions.user_id: foreign key dengan cascade delete
+   - article_submissions.reviewed_by: foreign key dengan set null
+
+6. Query Filtering:
+   - User: auth()->user()->articleSubmissions() (always filtered by ownership)
+   - Admin: ArticleSubmission::all() (no filter, can see everything)
+
+================================================================================
+EOF
+================================================================================
